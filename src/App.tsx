@@ -167,9 +167,23 @@ export default function App() {
         }),
       });
 
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text();
+        console.error("Non-JSON Response received:", text);
+        if (response.status === 502 || response.status === 503 || response.status === 504) {
+          throw new Error("Server sedang bersiap atau memuat ulang. Silakan tunggu sekitar 5-10 detik dan klik tombol lagi.");
+        }
+        throw new Error(`Server mengembalikan respon tidak valid (Status ${response.status}). Pastikan server berjalan dengan benar.`);
+      }
+
       const data = await response.json();
       if (!response.ok || !data.success) {
-        throw new Error(data.error || "Gagal menghubungi server AI.");
+        const errorMsg = data.error || "";
+        if (errorMsg.includes("GEMINI_API_KEY") || errorMsg.includes("apiClient")) {
+          throw new Error("API Key Gemini belum dikonfigurasi. Silakan tambahkan 'GEMINI_API_KEY' di menu Settings (ikon gerigi) pada bagian kiri bawah AI Studio agar AI dapat memproses deskripsi Anda.");
+        }
+        throw new Error(errorMsg || "Gagal menghubungi server AI.");
       }
 
       setResult(data.data);
