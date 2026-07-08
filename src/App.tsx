@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import ReactMarkdown from "react-markdown";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Sparkles,
@@ -621,8 +622,8 @@ Chat Sekarang"
                       </span>
                     </div>
 
-                    <div className="bg-slate-50/50 border border-slate-200 rounded-xl p-5 text-sm md:text-base leading-relaxed text-slate-800 whitespace-pre-wrap font-sans min-h-[150px] shadow-inner select-text">
-                      {result.rewrittenText}
+                    <div className="bg-slate-50/50 border border-slate-200 rounded-xl p-5 text-sm md:text-base leading-relaxed text-slate-800 font-sans min-h-[150px] shadow-inner select-text markdown-body">
+                      <ReactMarkdown>{result.rewrittenText}</ReactMarkdown>
                     </div>
                   </div>
 
