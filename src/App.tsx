@@ -460,15 +460,24 @@ Chat Sekarang"
             </div>
 
             {/* Error Message */}
-            {error && (
-              <div className="bg-rose-50 border border-rose-100 text-rose-700 p-4 rounded-xl text-sm flex items-start gap-2.5">
-                <AlertTriangle className="w-4.5 h-4.5 text-rose-500 flex-shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-semibold block mb-0.5">Validasi Input Gagal</span>
-                  <p className="text-xs text-rose-600">{error}</p>
+            {error && (() => {
+              const isValidationError = error.toLowerCase().includes("kosong") || 
+                                       error.toLowerCase().includes("karakter") || 
+                                       error.toLowerCase().includes("sedikit") || 
+                                       error.toLowerCase().includes("informasi") ||
+                                       error.toLowerCase().includes("validasi");
+              return (
+                <div className="bg-rose-50 border border-rose-100 text-rose-700 p-4 rounded-xl text-sm flex items-start gap-2.5">
+                  <AlertTriangle className="w-4.5 h-4.5 text-rose-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold block mb-0.5">
+                      {isValidationError ? "Validasi Masukan" : "Gagal Memproses Deskripsi"}
+                    </span>
+                    <p className="text-xs text-rose-600 whitespace-pre-line">{error}</p>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Main Action Button */}
             <div className="border-t border-slate-100 pt-5">
