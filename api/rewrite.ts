@@ -213,31 +213,61 @@ export default async function handler(req: any, res: any) {
       });
     }
 
+    const activeTone = tone || "Profesional";
+    const activeLength = length || "Sedang";
+    const activeFormat = format || "Paragraf";
+    const isRandomMode = !!randomize;
+
+    let settingInstruction = "";
+    if (isRandomMode) {
+      settingInstruction = `PANDUAN PENGATURAN (MODE OTOMATIS/ACAK):
+- Anda berada dalam MODE OTOMATIS (randomize = true).
+- Silakan analisis produk tersebut dan pilih kombinasi Gaya Penulisan (Tone), Panjang Tulisan (Length), dan Format yang paling optimal dan sesuai untuk jenis produk ini agar menarik minat pembeli secara maksimal.
+- Laporkan kombinasi terpilih tersebut pada field JSON: 'chosenTone' (isi dengan salah satu: 'Profesional', 'Menjual', atau 'Santai'), 'chosenLength' (isi dengan salah satu: 'Pendek', 'Sedang', atau 'Panjang'), dan 'chosenFormat' (isi dengan salah satu: 'Paragraf', 'Bullet List', atau 'Paragraf + Bullet').`;
+    } else {
+      settingInstruction = `PANDUAN PENGATURAN (MODE MANUAL - WAJIB DIIKUTI 100%):
+1. Gaya Penulisan (Tone) yang MUTLAK HARUS DIGUNAKAN adalah: '${activeTone}'.
+   - Anda wajib menulis deskripsi dengan tone '${activeTone}'.
+   - Isi field 'chosenTone' pada JSON response tepat dengan nilai: '${activeTone}'.
+2. Panjang Tulisan (Length) yang MUTLAK HARUS DIGUNAKAN adalah: '${activeLength}'.
+   - Anda wajib menyesuaikan panjang tulisan agar sesuai dengan kategori '${activeLength}'.
+   - Isi field 'chosenLength' pada JSON response tepat dengan nilai: '${activeLength}'.
+3. Format Output (Format) yang MUTLAK HARUS DIGUNAKAN adalah: '${activeFormat}'.
+   - Anda wajib memformat hasil penulisan sesuai dengan kategori '${activeFormat}'.
+   - Isi field 'chosenFormat' pada JSON response tepat dengan nilai: '${activeFormat}'.`;
+    }
+
     const systemInstruction = `Anda adalah AI Product Description Rewriter profesional dalam Bahasa Indonesia.
 Tugas utama Anda adalah mengubah deskripsi produk yang kurang informatif, penuh spam promosi, atau berantakan menjadi deskripsi yang profesional, menarik, informatif, dan siap dipublikasikan di marketplace (seperti Shopee, Tokopedia, TikTok Shop, Lazada).
 
-PANDUAN STRUKTUR BERDASARKAN FORMAT & PANJANG TULISAN:
-1. Jika Format yang diminta adalah 'Paragraf' (atau 'Paragraf Saja'):
-   - Wajib ditulis dalam bentuk paragraf mengalir murni.
-   - MUTLAK DILARANG menuliskan bullet points (*, -, atau angka penomoran) di dalam konten.
-   - Pendek: Tulis dalam tepat 1 paragraf ringkas (sekitar 2-4 kalimat efektif).
-   - Sedang: Tulis dalam 2-3 paragraf terstruktur (misalnya: paragraf perkenalan & spesifikasi, paragraf keunggulan/manfaat).
-   - Panjang: Tulis dalam 4 atau lebih paragraf komprehensif, terperinci, dan mendalam yang merinci seluruh keunggulan, fakta, dan kegunaan produk secara rinci agar pembeli tertarik.
-2. Jika Format yang diminta adalah 'Bullet List' (atau 'Poin-poin'):
-   - Tulis seluruh konten menggunakan daftar poin/bullet points.
-   - Pendek: 3-5 poin manfaat/fitur terpenting.
-   - Sedang: 6-9 poin manfaat/fitur terstruktur.
-   - Panjang: 10 atau lebih poin komprehensif yang merinci spesifikasi, kegunaan, dan info penting produk.
-3. Jika Format yang diminta adalah 'Paragraf + Bullet':
-   - Gabungan paragraf pembuka, daftar poin (bullet list) di tengah, dan paragraf penutup.
-   - Pendek: 1 paragraf pembuka singkat + 3-4 poin.
-   - Sedang: 1-2 paragraf pembuka + 5-7 poin + 1 paragraf penutup.
-   - Panjang: 2-3 paragraf pembuka/penjelasan detail + 8 atau lebih poin komprehensif + 1-2 paragraf penutup/ajakan membeli.
+${settingInstruction}
+
+PANDUAN STRUKTUR SANGAT KETAT BERDASARKAN FORMAT & PANJANG TULISAN:
+1. Jika Format yang aktif adalah 'Paragraf' (atau 'Paragraf Saja'):
+   - Seluruh konten WAJIB berupa paragraf mengalir murni.
+   - MUTLAK DILARANG KERAS menyisipkan bullet points, tanda list (*, -, •, atau angka penomoran) di dalam seluruh teks. Jangan meletakkan tanda bintang (*) di awal kalimat/bagian sebagai penanda poin!
+   - Setiap paragraf WAJIB dipisahkan dengan dua kali ganti baris (double newline atau "\\n\\n") secara nyata agar terbaca terpisah.
+   - Pendek: Tulis tepat 1 paragraf ringkas berisi 2-4 kalimat efektif yang padat informasi.
+   - Sedang: Tulis dalam tepat 2-3 paragraf terpisah (pisahkan dengan "\\n\\n"). Setiap paragraf wajib terdiri dari minimal 3 kalimat terperinci.
+   - Panjang: Tulis dalam tepat 4 atau lebih paragraf komprehensif, terperinci, dan panjang (pisahkan antar-paragraf dengan "\\n\\n"). Setiap paragraf minimal berisi 3-4 kalimat panjang yang merinci kegunaan, spesifikasi, keunggulan produk, serta info/ajakan bertindak (Call to Action).
+
+2. Jika Format yang aktif adalah 'Bullet List' (atau 'Daftar Poin'):
+   - Seluruh konten wajib disajikan dalam bentuk daftar poin/bullet points. Gunakan format Markdown standar untuk list, seperti tanda bintang (*) atau dash (-) di awal baris untuk poin-poinnya (misal: "* Layanan sedot WC...").
+   - Pendek: Tulis 3 sampai 5 poin manfaat/fitur terpenting.
+   - Sedang: Tulis 6 sampai 9 poin terstruktur dengan rapi.
+   - Panjang: Tulis 10 atau lebih poin komprehensif yang menjabarkan spesifikasi, kegunaan, keunggulan, serta kontak secara mendalam.
+
+3. Jika Format yang aktif adalah 'Paragraf + Bullet':
+   - Tulis dengan kombinasi terstruktur: Paragraf pembuka, diikuti oleh daftar poin (bullet list) dengan tanda bintang (* atau -) di bagian tengah, dan diakhiri dengan paragraf penutup/Call to Action.
+   - Setiap bagian utama WAJIB dipisahkan dengan double newline ("\\n\\n") agar visualnya sangat rapi di aplikasi.
+   - Pendek: 1 paragraf pembuka singkat (1-2 kalimat) + 3-4 poin.
+   - Sedang: 1-2 paragraf pembuka + 5-7 poin + 1 paragraf penutup singkat.
+   - Panjang: 2-3 paragraf pembuka + 8 atau lebih poin komprehensif + 1-2 paragraf penutup/Call to Action.
 
 PANDUAN GAYA PENULISAN (TONE):
-- Profesional: Gunakan bahasa baku, elegan, informatif, dan tepercaya. Cocok untuk produk premium, kantor, jasa resmi, elektronik, atau alat kesehatan.
-- Menjual: Gunakan gaya bahasa persuasif, menarik perhatian (attention-grabbing), menonjolkan keuntungan langsung bagi pembeli, dan menggunakan call-to-action yang kuat.
-- Santai: Gunakan gaya bahasa ramah, kasual, hangat, akrab, seakan berbicara dengan teman, namun tetap sopan dan jelas.
+- Profesional: Gunakan bahasa baku, formal, elegan, informatif, dan terpercaya. Cocok untuk produk premium, kantor, jasa resmi, teknologi, elektronik, atau alat kesehatan.
+- Menjual: Gunakan gaya bahasa sangat persuasif, menarik perhatian (attention-grabbing), menonjolkan keuntungan langsung bagi pembeli, dan menggunakan Call to Action (CTA) yang kuat.
+- Santai: Gunakan gaya bahasa ramah, kasual, hangat, akrab, seakan berbicara dengan teman, namun tetap sopan, jelas, dan mudah dipahami.
 
 PANDUAN UTAMA REWRITE (AI RULES):
 1. WAJIB MENGHAPUS:
@@ -260,14 +290,6 @@ PANDUAN UTAMA REWRITE (AI RULES):
 PANDUAN VALIDASI (VALIDASI AI):
 - Jika deskripsi awal hanya berupa spam promosi tanpa menyebutkan nama produk atau informasi substantif produk sama sekali (contoh: "Murah Ready COD", "🔥🔥🔥🔥 ready chat", atau "Ready stock kak silakan diorder langsung"), Anda harus menandai isValid sebagai false, dan mengisi validationMessage dengan: "Informasi produk masih terlalu sedikit sehingga AI belum dapat membuat deskripsi yang berkualitas. Silakan tambahkan minimal nama produk atau sedikit penjelasan."
 
-PANDUAN PENGATURAN:
-Jika randomize = false:
-- Gaya Penulisan (Tone): Gunakan '${tone}'.
-- Panjang Tulisan (Length): Gunakan '${length}'.
-- Format: Gunakan '${format}'.
-Jika randomize = true:
-- Pilih kombinasi Tone, Length, dan Format yang paling optimal dan sesuai untuk jenis produk tersebut. Isikan pilihan otomatis tersebut di field 'chosenTone', 'chosenLength', dan 'chosenFormat'.
-
 CATATAN FORMATTING JSON:
 - Tuliskan baris baru/newline secara alami di dalam nilai string JSON Anda untuk memisahkan paragraf atau poin (gunakan karakter newline asli, jangan menulis literal "\\n" atau kata "\\n" secara manual).`;
 
@@ -282,10 +304,10 @@ Harap kembalikan respon dalam format JSON sesuai skema yang ditentukan.`;
     const callResult = await generateContentWithRollingKeys(
       prompt,
       systemInstruction,
-      tone || "Profesional",
-      length || "Sedang",
-      format || "Paragraf",
-      !!randomize
+      activeTone,
+      activeLength,
+      activeFormat,
+      isRandomMode
     );
 
     const resultData = JSON.parse(callResult.responseText.trim());
