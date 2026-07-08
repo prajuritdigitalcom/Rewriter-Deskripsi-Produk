@@ -71,6 +71,12 @@ export default function App() {
   const [loadingTextIndex, setLoadingTextIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RewriteResponse | null>(null);
+  const [rollingMeta, setRollingMeta] = useState<{
+    usedKeyIndex: number;
+    usedKeyMasked: string;
+    attemptsUsed: number;
+    totalKeysAvailable: number;
+  } | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
   // Toast notification
@@ -153,6 +159,7 @@ export default function App() {
     setIsLoading(true);
     setError(null);
     setResult(null);
+    setRollingMeta(null);
 
     try {
       const response = await fetch("/api/rewrite", {
@@ -171,8 +178,8 @@ export default function App() {
       if (!contentType || !contentType.includes("application/json")) {
         const text = await response.text();
         console.error("Non-JSON Response received:", text);
-        if (response.status === 502 || response.status === 503 || response.status === 504) {
-          throw new Error("Server sedang bersiap atau memuat ulang. Silakan tunggu sekitar 5-10 detik dan klik tombol lagi.");
+        if (response.status === 502 || response.status === 503 || response.status === 504 || response.status === 404) {
+          throw new Error("Server sedang bersiap, memuat ulang, atau sedang tidur. Silakan tunggu sekitar 10-15 detik dan klik tombol 'Perbaiki Deskripsi' kembali.");
         }
         throw new Error(`Server mengembalikan respon tidak valid (Status ${response.status}). Pastikan server berjalan dengan benar.`);
       }
@@ -187,6 +194,9 @@ export default function App() {
       }
 
       setResult(data.data);
+      if (data.rollingMeta) {
+        setRollingMeta(data.rollingMeta);
+      }
     } catch (err: any) {
       console.error(err);
       setError(err.message || "Terjadi kesalahan koneksi atau server AI bermasalah.");
@@ -544,9 +554,25 @@ Chat Sekarang"
                         <h2 className="text-base font-bold text-slate-900 leading-tight">
                           Hasil Perbaikan AI
                         </h2>
-                        <span className="text-[11px] text-slate-500 font-medium">
-                          Fakta produk dipertahankan • Spam promosi disaring
-                        </span>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                          <span className="text-[11px] text-slate-500 font-medium">
+                            Fakta produk dipertahankan • Spam promosi disaring
+                          </span>
+                          {rollingMeta && (
+                            <>
+                              <span className="text-[11px] text-slate-300">•</span>
+                              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-100 text-[9px] text-emerald-700 font-mono font-semibold">
+                                <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse"></span>
+                                <span>API Key #{rollingMeta.usedKeyIndex} ({rollingMeta.usedKeyMasked})</span>
+                                {rollingMeta.totalKeysAvailable > 1 && (
+                                  <span className="text-emerald-500 opacity-60">
+                                    (Rotasi Aktif)
+                                  </span>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -626,9 +652,15 @@ Chat Sekarang"
                     <AlertTriangle className="w-6 h-6 stroke-[2.5]" />
                   </div>
                   <div className="max-w-md mx-auto">
-                    <h3 className="text-base font-bold text-amber-800 mb-2">
+                    <h3 className="text-base font-bold text-amber-800 mb-1">
                       Informasi Produk Kurang Lengkap
                     </h3>
+                    {rollingMeta && (
+                      <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-amber-100/60 border border-amber-200/80 text-[9px] text-amber-850 font-mono font-bold mb-2">
+                        <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse"></span>
+                        <span>API Key #{rollingMeta.usedKeyIndex} ({rollingMeta.usedKeyMasked})</span>
+                      </div>
+                    )}
                     <p className="text-sm text-amber-700 leading-relaxed">
                       {result.validationMessage ||
                         "Informasi produk masih terlalu sedikit sehingga AI belum dapat membuat deskripsi yang berkualitas. Silakan tambahkan minimal nama produk atau sedikit penjelasan."}
