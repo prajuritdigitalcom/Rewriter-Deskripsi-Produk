@@ -94,6 +94,7 @@ export default function App() {
   const [rotationLogs, setRotationLogs] = useState<any[]>([]);
   const [keyStatuses, setKeyStatuses] = useState<any[]>([]);
   const [showMonitor, setShowMonitor] = useState(false);
+  const [detectedEnvKeys, setDetectedEnvKeys] = useState<string[]>([]);
 
   // Toast notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -115,6 +116,10 @@ export default function App() {
         if (result.success && result.keyStatuses) {
           setKeyStatuses(result.keyStatuses);
           localStorage.setItem("last_key_statuses", JSON.stringify(result.keyStatuses));
+        }
+        if (result.success && result.detectedEnvKeys) {
+          setDetectedEnvKeys(result.detectedEnvKeys);
+          localStorage.setItem("last_detected_env_keys", JSON.stringify(result.detectedEnvKeys));
         }
       }
     } catch (e) {
@@ -142,11 +147,15 @@ export default function App() {
     // Load last known monitor state
     const savedStatuses = localStorage.getItem("last_key_statuses");
     const savedLogs = localStorage.getItem("last_rotation_logs");
+    const savedDetectedEnv = localStorage.getItem("last_detected_env_keys");
     if (savedStatuses) {
       try { setKeyStatuses(JSON.parse(savedStatuses)); } catch {}
     }
     if (savedLogs) {
       try { setRotationLogs(JSON.parse(savedLogs)); } catch {}
+    }
+    if (savedDetectedEnv) {
+      try { setDetectedEnvKeys(JSON.parse(savedDetectedEnv)); } catch {}
     }
 
     // Fetch live statuses from server
@@ -316,6 +325,10 @@ export default function App() {
       if (data.keyStatuses) {
         setKeyStatuses(data.keyStatuses);
         localStorage.setItem("last_key_statuses", JSON.stringify(data.keyStatuses));
+      }
+      if (data.detectedEnvKeys) {
+        setDetectedEnvKeys(data.detectedEnvKeys);
+        localStorage.setItem("last_detected_env_keys", JSON.stringify(data.detectedEnvKeys));
       }
     } catch (err: any) {
       console.error(err);
@@ -964,6 +977,34 @@ Chat Sekarang"
 
             {showMonitor && (
               <div className="p-5 md:p-6 border-t border-slate-800 bg-slate-900/20 flex flex-col gap-6 animate-fade-in">
+                
+                {/* Active Env Keys Status Bar */}
+                <div className="bg-slate-950/60 rounded-xl border border-slate-800 p-4 text-xs flex flex-col gap-3 shadow-inner">
+                  <div className="flex items-center gap-2 text-slate-200 font-bold">
+                    <span className="text-pink-brand">⚙️</span>
+                    <span>Sistem Hosting Environment Variables (Live)</span>
+                  </div>
+                  <p className="text-slate-400 leading-relaxed text-[11px] sm:text-xs">
+                    Sistem mendeteksi API Key Gemini yang terpasang aktif di server hosting Anda. Jika Anda baru saja menambah atau mengubah environment variables di platform hosting (misal: Vercel / Cloud Run), <strong>Anda wajib men-deploy ulang (redeploy) aplikasi</strong> agar perubahan kunci baru tersebut dapat diterapkan oleh server.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-800/50">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Kunci Sistem Terbaca Server:</span>
+                    {detectedEnvKeys.length > 0 ? (
+                      detectedEnvKeys.map((envName, idx) => (
+                        <span key={idx} className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-950/60 border border-emerald-800/60 text-emerald-400 font-mono text-[10px] font-bold">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                          {envName}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-rose-950/40 border border-rose-900/40 text-rose-400 font-mono text-[10px] font-semibold animate-pulse">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                        Tidak ada kunci sistem terbaca. Silakan redeploy aplikasi Anda atau gunakan API Key Cadangan di atas.
+                      </span>
+                    )}
+                  </div>
+                </div>
+
                 {/* Rotation Status Table */}
                 <div className="flex flex-col gap-2.5">
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
