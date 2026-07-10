@@ -23,6 +23,20 @@ function getAllApiKeys(): string[] {
   return combined.filter((item, index) => combined.indexOf(item) === index && item.length > 0);
 }
 
+// Helper to get active environment variable names for debugging
+function getDetectedEnvVariableNames(): string[] {
+  const detected: string[] = [];
+  if (process.env.GEMINI_API_KEY) {
+    detected.push("GEMINI_API_KEY");
+  }
+  for (let i = 1; i <= 10; i++) {
+    if (process.env[`GEMINI_API_KEY_${i}`]) {
+      detected.push(`GEMINI_API_KEY_${i}`);
+    }
+  }
+  return detected;
+}
+
 // Key state model for visualization & monitoring
 interface KeyState {
   fails: number;
@@ -475,7 +489,8 @@ Harap kembalikan respon dalam format JSON sesuai skema yang ditentukan.`;
         totalKeysAvailable: getAllApiKeys().length + parsedCustomKeys.length
       },
       rotationLogs: callResult.rotationLogs,
-      keyStatuses: callResult.keyStatuses
+      keyStatuses: callResult.keyStatuses,
+      detectedEnvKeys: getDetectedEnvVariableNames()
     });
 
   } catch (error: any) {
