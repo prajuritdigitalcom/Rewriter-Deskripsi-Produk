@@ -467,6 +467,81 @@ Harap kembalikan respon dalam format JSON sesuai skema yang ditentukan.`;
     }
   });
 
+  // API endpoint to query status of all keys (system & custom)
+  app.post("/api/keys-status", (req, res) => {
+    try {
+      const { customKeys } = req.body;
+      const systemKeys = getAllApiKeys();
+
+      interface KeyInfo {
+        key: string;
+        alias: string;
+        signature: string;
+        type: "System" | "Custom";
+      }
+
+      const allKeys: KeyInfo[] = [];
+
+      // Populate system keys
+      systemKeys.forEach((key, index) => {
+        const signature = key.length > 12 ? `${key.substring(0, 8)}...${key.substring(key.length - 6)}` : "Key Pendek";
+        allKeys.push({
+          key,
+          alias: `Sistem #${index + 1}`,
+          signature,
+          type: "System"
+        });
+      });
+
+      // Populate custom keys
+      const parsedCustomKeys = Array.isArray(customKeys)
+        ? customKeys.map(k => typeof k === "string" ? k.trim() : "").filter(Boolean)
+        : [];
+
+      parsedCustomKeys.forEach((key, index) => {
+        if (key && !systemKeys.includes(key)) {
+          const signature = key.length > 12 ? `${key.substring(0, 8)}...${key.substring(key.length - 6)}` : "Key Pendek";
+          allKeys.push({
+            key,
+            alias: `Cadangan #${index + 1}`,
+            signature,
+            type: "Custom"
+          });
+        }
+      });
+
+      const now = Date.now();
+      const keyStatuses = allKeys.map(k => {
+        const s = keyStatesCache[k.signature] || {
+          fails: 0,
+          lastRequest: "-",
+          status: "Active",
+          cooldownUntil: 0
+        };
+        const cooldownRemaining = s.cooldownUntil > now ? Math.ceil((s.cooldownUntil - now) / 1000) : 0;
+        return {
+          keyAlias: k.alias,
+          keySignature: k.signature,
+          type: k.type,
+          status: cooldownRemaining > 0 ? "Cooldown" : (s.fails >= 3 ? "Failed" : "Active"),
+          cooldown: cooldownRemaining > 0 ? `${cooldownRemaining}s` : "0s",
+          lastRequest: s.lastRequest,
+          fails: s.fails
+        };
+      });
+
+      return res.json({
+        success: true,
+        keyStatuses
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        error: error.message || "Internal server error"
+      });
+    }
+  });
+
   // Serve static files / Vite middleware
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

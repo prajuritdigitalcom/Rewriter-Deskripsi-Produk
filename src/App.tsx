@@ -102,8 +102,29 @@ export default function App() {
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
 
+  // Fetch real key statuses from server
+  const fetchKeyStatuses = async (keysList: string[]) => {
+    try {
+      const response = await fetch("/api/keys-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customKeys: keysList })
+      });
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.keyStatuses) {
+          setKeyStatuses(result.keyStatuses);
+          localStorage.setItem("last_key_statuses", JSON.stringify(result.keyStatuses));
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch key statuses", e);
+    }
+  };
+
   // Load saved keys on mount
   useEffect(() => {
+    let initialKeys: string[] = [];
     const savedKeysJson = localStorage.getItem("visitor_gemini_api_keys");
     if (savedKeysJson) {
       try {
@@ -111,6 +132,7 @@ export default function App() {
         if (Array.isArray(parsed)) {
           setCustomKeys(parsed);
           setCustomKeysRaw(parsed.join("\n"));
+          initialKeys = parsed;
         }
       } catch (e) {
         console.error("Failed to load saved keys", e);
@@ -126,6 +148,9 @@ export default function App() {
     if (savedLogs) {
       try { setRotationLogs(JSON.parse(savedLogs)); } catch {}
     }
+
+    // Fetch live statuses from server
+    fetchKeyStatuses(initialKeys);
   }, []);
 
   const handleSaveKeys = () => {
@@ -148,24 +173,8 @@ export default function App() {
     localStorage.setItem("visitor_gemini_api_keys", JSON.stringify(parsed));
     triggerToast(`Berhasil menyimpan ${parsed.length} API Key Cadangan.`);
     
-    // Update local statuses representation instantly so user sees their new key in the list
-    const updatedStatuses = [
-      ...keyStatuses.filter(ks => ks.type !== "Custom"),
-      ...parsed.map((key, index) => {
-        const sig = key.length > 12 ? `${key.substring(0, 8)}...${key.substring(key.length - 6)}` : "Key Pendek";
-        return {
-          keyAlias: `Cadangan #${index + 1}`,
-          keySignature: sig,
-          type: "Custom",
-          status: "Active",
-          cooldown: "0s",
-          lastRequest: "-",
-          fails: 0
-        };
-      })
-    ];
-    setKeyStatuses(updatedStatuses);
-    localStorage.setItem("last_key_statuses", JSON.stringify(updatedStatuses));
+    // Instantly query server with new backup keys to show them in the monitor
+    fetchKeyStatuses(parsed);
   };
 
   const handleClearKeys = () => {
@@ -174,9 +183,8 @@ export default function App() {
     localStorage.removeItem("visitor_gemini_api_keys");
     triggerToast("Seluruh API Key cadangan dihapus.");
 
-    const updatedStatuses = keyStatuses.filter(ks => ks.type !== "Custom");
-    setKeyStatuses(updatedStatuses);
-    localStorage.setItem("last_key_statuses", JSON.stringify(updatedStatuses));
+    // Instantly query server with empty custom keys to remove custom rows
+    fetchKeyStatuses([]);
   };
 
   // Reference for results card scroll
