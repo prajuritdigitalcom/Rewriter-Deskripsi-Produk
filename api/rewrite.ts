@@ -23,52 +23,142 @@ function getAllApiKeys(): string[] {
   return combined.filter((item, index) => combined.indexOf(item) === index && item.length > 0);
 }
 
+// Key state model for visualization & monitoring
+interface KeyState {
+  fails: number;
+  lastRequest: string; // HH:mm:ss format
+  status: "Active" | "Cooldown" | "Failed";
+  cooldownUntil: number; // timestamp
+}
+
+// Global state cache for API keys, indexed by masked key (keySignature)
+const keyStatesCache: Record<string, KeyState> = {};
+
+function getFormattedTime(): string {
+  const now = new Date();
+  return now.toTimeString().split(' ')[0]; // "HH:mm:ss"
+}
+
 interface GeminiCallResult {
   responseText: string;
   usedKeyIndex: number;
   usedKeyMasked: string;
   attemptsUsed: number;
+  rotationLogs: any[];
+  keyStatuses: any[];
 }
 
-// Function to call Gemini API with automatic rolling key fallback
+// Function to call Gemini API with automatic rolling key fallback and custom keys support
 async function generateContentWithRollingKeys(
   prompt: string,
   systemInstruction: string,
   tone: string,
   length: string,
   format: string,
-  randomize: boolean
+  randomize: boolean,
+  customKeys: string[] = []
 ): Promise<GeminiCallResult> {
-  const apiKeys = getAllApiKeys();
-  
-  console.log(`[Vercel Serverless Logs] Mendeteksi total ${apiKeys.length} API Key Gemini terkonfigurasi.`);
+  const systemKeys = getAllApiKeys();
+  const rotationLogs: any[] = [];
 
-  if (apiKeys.length === 0) {
-    throw new Error("GEMINI_API_KEY belum dikonfigurasi di environment variables Vercel. Silakan tambahkan 'GEMINI_API_KEY' atau 'GEMINI_API_KEY_1' s/d 'GEMINI_API_KEY_10' di dashboard Vercel -> Settings -> Environment Variables.");
+  interface KeyInfo {
+    key: string;
+    alias: string;
+    signature: string;
+    type: "System" | "Custom";
   }
 
-  const totalKeys = apiKeys.length;
+  const allKeysToTry: KeyInfo[] = [];
+
+  // 1. Populate System Keys
+  systemKeys.forEach((key, index) => {
+    const signature = key.length > 12 ? `${key.substring(0, 8)}...${key.substring(key.length - 6)}` : "Key Pendek";
+    allKeysToTry.push({
+      key,
+      alias: `Sistem #${index + 1}`,
+      signature,
+      type: "System"
+    });
+  });
+
+  // 2. Populate Custom Keys
+  customKeys.forEach((key, index) => {
+    if (key && !systemKeys.includes(key)) {
+      const signature = key.length > 12 ? `${key.substring(0, 8)}...${key.substring(key.length - 6)}` : "Key Pendek";
+      allKeysToTry.push({
+        key,
+        alias: `Cadangan #${index + 1}`,
+        signature,
+        type: "Custom"
+      });
+    }
+  });
+
+  if (allKeysToTry.length === 0) {
+    throw new Error("Tidak ada API Key Gemini yang tersedia. Silakan masukkan API Key cadangan Anda.");
+  }
+
+  const now = Date.now();
+  // Ensure all keys exist in cache
+  allKeysToTry.forEach(k => {
+    if (!keyStatesCache[k.signature]) {
+      keyStatesCache[k.signature] = {
+        fails: 0,
+        lastRequest: "-",
+        status: "Active",
+        cooldownUntil: 0
+      };
+    }
+  });
+
+  // Separate keys into active/ready keys and cooldown keys
+  const readyKeys = allKeysToTry.filter(k => {
+    const state = keyStatesCache[k.signature];
+    return now >= state.cooldownUntil && state.status !== "Failed";
+  });
+
+  const cooldownKeys = allKeysToTry.filter(k => {
+    const state = keyStatesCache[k.signature];
+    return now < state.cooldownUntil || state.status === "Failed";
+  }).sort((a, b) => {
+    const stateA = keyStatesCache[a.signature];
+    const stateB = keyStatesCache[b.signature];
+    return stateA.cooldownUntil - stateB.cooldownUntil; // earliest cooldown end first
+  });
+
+  // Order of execution: try ready keys first, then cooldown keys as failover
+  const sortedKeysToExecute = [...readyKeys, ...cooldownKeys];
+
   let attempts = 0;
   let lastError: any = null;
+  let successResult: any = null;
+  let chosenKeyInfo: KeyInfo | null = null;
 
-  // Since Serverless is stateless, let's start with a random index to distribute load across keys (load balancing)
-  const startIdx = Math.floor(Math.random() * totalKeys);
-  console.log(`[Vercel Serverless Logs] Memulai pencarian kunci aktif dari indeks acak: #${startIdx + 1}`);
+  for (const keyInfo of sortedKeysToExecute) {
+    const { key, alias, signature, type } = keyInfo;
+    const state = keyStatesCache[signature];
+    attempts++;
 
-  while (attempts < totalKeys) {
-    const indexToTry = (startIdx + attempts) % totalKeys;
-    const apiKey = apiKeys[indexToTry];
-    
-    // Create a masked version for logging
-    const maskedKey = apiKey.length > 12
-      ? `${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 6)}`
-      : "Kunci Pendek/Format Kustom";
+    // Update state to record the request
+    state.lastRequest = getFormattedTime();
+
+    // Check if on cooldown to log warning
+    const isOnCooldown = Date.now() < state.cooldownUntil;
+    const cooldownRemaining = isOnCooldown ? Math.ceil((state.cooldownUntil - Date.now()) / 1000) : 0;
+
+    rotationLogs.push({
+      timestamp: getFormattedTime(),
+      keyAlias: alias,
+      keySignature: signature,
+      status: isOnCooldown ? "Cooldown Failover" : "Mencoba",
+      message: isOnCooldown 
+        ? `[Cadangan Terakhir] Mencoba kunci ${alias} (${signature}) yang sedang cooldown (sisa ${cooldownRemaining}s).`
+        : `Memproses deskripsi menggunakan kunci ${alias} (${signature}).`
+    });
 
     try {
-      console.log(`[Vercel Serverless Logs] [Mencoba Key #${indexToTry + 1}] Memproses permintaan menggunakan API Key #${indexToTry + 1} (${maskedKey}) - Percobaan ${attempts + 1}/${totalKeys}`);
-
       const ai = new GoogleGenAI({
-        apiKey,
+        apiKey: key,
         httpOptions: {
           headers: {
             "User-Agent": "aistudio-build",
@@ -124,30 +214,77 @@ async function generateContentWithRollingKeys(
         throw new Error("Respon kosong diterima dari Gemini API.");
       }
 
-      console.log(`[Vercel Serverless Logs] [SUKSES] Berhasil memproses dengan API Key #${indexToTry + 1} (${maskedKey})`);
+      // Success! Update key state
+      state.fails = 0;
+      state.status = "Active";
+      state.cooldownUntil = 0;
 
-      return {
-        responseText: text,
-        usedKeyIndex: indexToTry + 1,
-        usedKeyMasked: maskedKey,
-        attemptsUsed: attempts + 1
-      };
+      rotationLogs.push({
+        timestamp: getFormattedTime(),
+        keyAlias: alias,
+        keySignature: signature,
+        status: "Sukses",
+        message: `Berhasil mendapatkan respon menggunakan kunci ${alias} (${signature})!`
+      });
+
+      successResult = text;
+      chosenKeyInfo = keyInfo;
+      break; // Exit loop on success
 
     } catch (err: any) {
       lastError = err;
       const errMsg = err?.message || String(err);
-      console.error(`[Vercel Serverless Logs] [GAGAL Key #${indexToTry + 1}] Gagal menggunakan API Key #${indexToTry + 1} (${maskedKey}). Pesan Error: ${errMsg}`);
       
-      // Increment attempts to move to the next key
-      attempts++;
+      // Update key state on failure
+      state.fails += 1;
+      // Put in 60s cooldown
+      state.cooldownUntil = Date.now() + 60000;
+      state.status = state.fails >= 3 ? "Failed" : "Cooldown";
+
+      rotationLogs.push({
+        timestamp: getFormattedTime(),
+        keyAlias: alias,
+        keySignature: signature,
+        status: "Gagal",
+        message: `Kunci ${alias} (${signature}) gagal. Error: ${errMsg}. Masuk cooldown 60 detik.`
+      });
     }
   }
 
-  // If all keys failed
-  console.error("[Vercel Serverless Logs] [SEMUA KUNCI GAGAL] Semua API Key yang terdaftar telah dicoba dan seluruhnya gagal.");
+  // Format final status report of all keys to send to client
+  const keyStatuses = allKeysToTry.map(k => {
+    const s = keyStatesCache[k.signature];
+    const cooldownRemaining = s.cooldownUntil > Date.now() ? Math.ceil((s.cooldownUntil - Date.now()) / 1000) : 0;
+    return {
+      keyAlias: k.alias,
+      keySignature: k.signature,
+      type: k.type,
+      status: cooldownRemaining > 0 ? "Cooldown" : (s.fails >= 3 ? "Failed" : "Active"),
+      cooldown: cooldownRemaining > 0 ? `${cooldownRemaining}s` : "0s",
+      lastRequest: s.lastRequest,
+      fails: s.fails
+    };
+  });
+
+  if (successResult) {
+    const cleanIndex = chosenKeyInfo?.type === "System" 
+      ? systemKeys.indexOf(chosenKeyInfo.key) + 1 
+      : customKeys.indexOf(chosenKeyInfo?.key || "") + 1;
+
+    return {
+      responseText: successResult,
+      usedKeyIndex: cleanIndex,
+      usedKeyMasked: chosenKeyInfo?.signature || "",
+      attemptsUsed: attempts,
+      rotationLogs,
+      keyStatuses
+    };
+  }
+
+  // All keys failed
   const quotaOrAuthMsg = lastError?.message || "Kesalahan Tidak Diketahui";
   throw new Error(
-    `Seluruh (${totalKeys}) API Key Gemini Anda gagal dicoba pada server Vercel. Kemungkinan kuota habis (Error 429) atau API Key tidak valid. Error terakhir: ${quotaOrAuthMsg}`
+    `Seluruh (${allKeysToTry.length}) API Key Gemini (Sistem & Cadangan) gagal dicoba pada server Vercel. Kemungkinan kuota habis (Error 429) atau API Key tidak valid. Error terakhir: ${quotaOrAuthMsg}`
   );
 }
 
@@ -170,7 +307,7 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { inputText, tone, length, format, randomize } = req.body || {};
+    const { inputText, tone, length, format, randomize, customKeys } = req.body || {};
 
     console.log("[Vercel Serverless Logs] Menerima permintaan rewrite baru.");
     console.log(`- Tone: ${tone || "Profesional (Default)"}`);
@@ -178,6 +315,12 @@ export default async function handler(req: any, res: any) {
     console.log(`- Format: ${format || "Paragraf Saja (Default)"}`);
     console.log(`- Randomize: ${randomize ? "Ya" : "Tidak"}`);
     console.log(`- Panjang Input: ${inputText ? inputText.length : 0} karakter`);
+
+    const parsedCustomKeys = Array.isArray(customKeys)
+      ? customKeys.map(k => typeof k === "string" ? k.trim() : "").filter(Boolean)
+      : [];
+
+    console.log(`- Custom Keys cadangan disediakan: ${parsedCustomKeys.length} kunci.`);
 
     // Primary validation: check if text is empty or less than 10 characters
     if (!inputText || typeof inputText !== "string") {
@@ -300,14 +443,15 @@ ${trimmedInput}
 
 Harap kembalikan respon dalam format JSON sesuai skema yang ditentukan.`;
 
-    // Call Gemini with rolling/fallback keys
+    // Call Gemini with rolling/fallback keys and custom backup keys
     const callResult = await generateContentWithRollingKeys(
       prompt,
       systemInstruction,
       activeTone,
       activeLength,
       activeFormat,
-      isRandomMode
+      isRandomMode,
+      parsedCustomKeys
     );
 
     const resultData = JSON.parse(callResult.responseText.trim());
@@ -328,8 +472,10 @@ Harap kembalikan respon dalam format JSON sesuai skema yang ditentukan.`;
         usedKeyIndex: callResult.usedKeyIndex,
         usedKeyMasked: callResult.usedKeyMasked,
         attemptsUsed: callResult.attemptsUsed,
-        totalKeysAvailable: getAllApiKeys().length
-      }
+        totalKeysAvailable: getAllApiKeys().length + parsedCustomKeys.length
+      },
+      rotationLogs: callResult.rotationLogs,
+      keyStatuses: callResult.keyStatuses
     });
 
   } catch (error: any) {
