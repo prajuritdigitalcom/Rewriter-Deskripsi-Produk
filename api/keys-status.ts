@@ -4,36 +4,47 @@ dotenv.config();
 
 // Helper to gather all configured Gemini API keys
 function getAllApiKeys(): string[] {
-  const keysFromEnv = (process.env.GEMINI_API_KEY || "")
-    .split(",")
-    .map(k => k.trim())
-    .filter(Boolean);
+  const keys: string[] = [];
 
-  const individualKeys: string[] = [];
-  for (let i = 1; i <= 10; i++) {
-    const key = process.env[`GEMINI_API_KEY_${i}`];
-    if (key) {
-      individualKeys.push(key.trim());
+  // Sort env keys so GEMINI_API_KEY is first, then GEMINI_API_KEY_1, GEMINI_API_KEY_2, etc.
+  const envKeys = Object.keys(process.env).sort((a, b) => {
+    if (a === "GEMINI_API_KEY") return -1;
+    if (b === "GEMINI_API_KEY") return 1;
+    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+  });
+
+  for (const envKey of envKeys) {
+    const upperKey = envKey.toUpperCase();
+    if (upperKey.includes("GEMINI") && upperKey.includes("KEY")) {
+      const val = process.env[envKey];
+      if (val) {
+        // If it's a comma-separated list of keys
+        if (val.includes(",")) {
+          const parts = val.split(",").map(k => k.trim()).filter(Boolean);
+          keys.push(...parts);
+        } else {
+          keys.push(val.trim());
+        }
+      }
     }
   }
 
-  // Combine and remove duplicates, preserving original order
-  const combined = [...keysFromEnv, ...individualKeys];
-  return combined.filter((item, index) => combined.indexOf(item) === index && item.length > 0);
+  // Remove duplicates, preserving order
+  return keys.filter((item, index) => keys.indexOf(item) === index && item.length > 0);
 }
 
 // Helper to get active environment variable names for debugging
 function getDetectedEnvVariableNames(): string[] {
-  const detected: string[] = [];
-  if (process.env.GEMINI_API_KEY) {
-    detected.push("GEMINI_API_KEY");
-  }
-  for (let i = 1; i <= 10; i++) {
-    if (process.env[`GEMINI_API_KEY_${i}`]) {
-      detected.push(`GEMINI_API_KEY_${i}`);
-    }
-  }
-  return detected;
+  return Object.keys(process.env)
+    .filter(key => {
+      const upper = key.toUpperCase();
+      return upper.includes("GEMINI") && upper.includes("KEY");
+    })
+    .sort((a, b) => {
+      if (a === "GEMINI_API_KEY") return -1;
+      if (b === "GEMINI_API_KEY") return 1;
+      return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+    });
 }
 
 export default async function handler(req: any, res: any) {

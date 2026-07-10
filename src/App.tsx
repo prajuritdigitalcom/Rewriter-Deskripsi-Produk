@@ -95,6 +95,7 @@ export default function App() {
   const [keyStatuses, setKeyStatuses] = useState<any[]>([]);
   const [showMonitor, setShowMonitor] = useState(false);
   const [detectedEnvKeys, setDetectedEnvKeys] = useState<string[]>([]);
+  const [apiStatusError, setApiStatusError] = useState<string | null>(null);
 
   // Toast notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -111,19 +112,36 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ customKeys: keysList })
       });
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success && result.keyStatuses) {
+      
+      if (!response.ok) {
+        setApiStatusError(`HTTP ${response.status}`);
+        return;
+      }
+
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        // If it's a fallback HTML page (Vercel rewrite redirecting to index.html because of 404)
+        setApiStatusError("HTML_REDIRECT");
+        return;
+      }
+
+      const result = await response.json();
+      if (result.success) {
+        setApiStatusError(null);
+        if (result.keyStatuses) {
           setKeyStatuses(result.keyStatuses);
           localStorage.setItem("last_key_statuses", JSON.stringify(result.keyStatuses));
         }
-        if (result.success && result.detectedEnvKeys) {
+        if (result.detectedEnvKeys) {
           setDetectedEnvKeys(result.detectedEnvKeys);
           localStorage.setItem("last_detected_env_keys", JSON.stringify(result.detectedEnvKeys));
         }
+      } else {
+        setApiStatusError(result.error || "UNKNOWN_ERROR");
       }
     } catch (e) {
       console.error("Failed to fetch key statuses", e);
+      setApiStatusError("CONNECTION_FAILED");
     }
   };
 
@@ -443,17 +461,8 @@ export default function App() {
             {showKeySettings && (
               <div className="p-5 md:p-6 border-t border-slate-100 bg-slate-50/30 flex flex-col gap-4 animate-fade-in">
                 <div className="bg-white rounded-xl border border-slate-200/60 p-4 text-xs md:text-sm text-slate-700 flex flex-col gap-2.5 shadow-xs">
-                  <p className="flex items-start gap-2 text-slate-600">
-                    <span className="text-pink-brand text-sm mt-[2px]">🛡️</span>
-                    <span>
-                      <strong>Keamanan Mutlak:</strong> API Key Anda disimpan 100% lokal di browser Anda (<code className="font-mono bg-slate-100 px-1 py-0.5 rounded text-[11px] text-pink-brand">localStorage</code>) dan tidak disimpan di server kami. Sangat aman dan tidak bisa diakses orang lain.
-                    </span>
-                  </p>
-                  <p className="flex items-start gap-2 text-slate-600">
-                    <span className="text-pink-brand text-sm mt-[2px]">🔄</span>
-                    <span>
-                      <strong>Rotasi & Failover Otomatis:</strong> Saat perbaikan deskripsi diklik dan API Key kami mengalami limitasi (Error 503), sistem akan otomatis mengalihkan request ke API Key cadangan Anda demi kelancaran proses.
-                    </span>
+                  <p className="text-slate-600">
+                    <strong>Keamanan Mutlak:</strong> API Key Anda disimpan lokal di browser (localStorage), aman dan tidak dikirim ke server kami.
                   </p>
                 </div>
 
@@ -467,7 +476,7 @@ export default function App() {
                   <textarea
                     rows={3}
                     className="w-full p-3 font-mono text-xs text-slate-800 bg-white border border-slate-200 rounded-xl focus:border-pink-brand focus:outline-none placeholder-slate-300 shadow-2xs"
-                    placeholder="AIzaSyB1lv3zWCzJatw9Qtu-kJnixswVUr3Sbjw&#10;AIzaSyAfRnZZnBw4Oq3-gqyqxLi4UusvmKLRzhg"
+                    placeholder="AIzaSy...&#10;AIzaSy..."
                     value={customKeysRaw}
                     onChange={(e) => setCustomKeysRaw(e.target.value)}
                   />
@@ -985,8 +994,21 @@ Chat Sekarang"
                     <span>Sistem Hosting Environment Variables (Live)</span>
                   </div>
                   <p className="text-slate-400 leading-relaxed text-[11px] sm:text-xs">
-                    Sistem mendeteksi API Key Gemini yang terpasang aktif di server hosting Anda. Jika Anda baru saja menambah atau mengubah environment variables di platform hosting (misal: Vercel / Cloud Run), <strong>Anda wajib men-deploy ulang (redeploy) aplikasi</strong> agar perubahan kunci baru tersebut dapat diterapkan oleh server.
+                    Mendeteksi API Key Gemini aktif di server hosting Anda. Jika Anda mengubah environment variables (misal: di Vercel), silakan lakukan <strong>redeploy</strong> agar kunci baru diterapkan.
                   </p>
+                  
+                  {apiStatusError === "HTML_REDIRECT" && (
+                    <div className="p-3 rounded-lg bg-amber-950/40 border border-amber-900/50 text-amber-300 text-[11px] leading-relaxed">
+                      ⚠️ <strong>Server belum diperbarui:</strong> Server Anda saat ini belum mengenali pelacak kunci baru karena kode terbaru belum sepenuhnya aktif. Silakan lakukan <strong>Redeploy</strong> (pilih opsi <i>Redeploy</i> di menu Deployment Vercel Dashboard Anda) agar perubahan kode dan environment variables aktif secara serentak.
+                    </div>
+                  )}
+
+                  {apiStatusError && apiStatusError !== "HTML_REDIRECT" && (
+                    <div className="p-3 rounded-lg bg-rose-950/40 border border-rose-900/50 text-rose-300 text-[11px] leading-relaxed">
+                      ⚠️ <strong>Diagnostic Log ({apiStatusError}):</strong> Server mengembalikan kode status kesalahan. Silakan redeploy aplikasi Anda atau pastikan konfigurasi proyek di Vercel Anda sudah sesuai.
+                    </div>
+                  )}
+
                   <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-800/50">
                     <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Kunci Sistem Terbaca Server:</span>
                     {detectedEnvKeys.length > 0 ? (
@@ -1147,21 +1169,10 @@ Chat Sekarang"
 
       {/* Footer */}
       <footer className="bg-white border-t border-slate-100 py-8 mt-12 text-center text-slate-400 text-xs">
-        <div className="max-w-4xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded bg-pink-brand-light flex items-center justify-center">
-              <Sparkles className="w-3.5 h-3.5 text-pink-brand" />
-            </div>
-            <span className="font-semibold text-slate-600">AI Product Description Rewriter</span>
-          </div>
+        <div className="max-w-4xl mx-auto px-4 flex justify-center">
           <p className="text-slate-400">
             © {new Date().getFullYear()} AI Product Description Rewriter. Hak Cipta Dilindungi.
           </p>
-          <div className="flex items-center gap-4 text-slate-400 font-medium">
-            <button onClick={() => setShowAboutModal(true)} className="hover:text-pink-brand transition">Tentang Kami</button>
-            <span>•</span>
-            <button onClick={() => setShowPrivacyModal(true)} className="hover:text-pink-brand transition">Privasi</button>
-          </div>
         </div>
       </footer>
 
