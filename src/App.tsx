@@ -476,7 +476,7 @@ export default function App() {
                   <textarea
                     rows={3}
                     className="w-full p-3 font-mono text-xs text-slate-800 bg-white border border-slate-200 rounded-xl focus:border-pink-brand focus:outline-none placeholder-slate-300 shadow-2xs"
-                    placeholder="AIzaSy...&#10;AIzaSy..."
+                    placeholder="Masukkan API Key Gemini Anda di sini (satu kunci per baris)&#10;Contoh: Kunci_Cadangan_1&#10;Contoh: Kunci_Cadangan_2"
                     value={customKeysRaw}
                     onChange={(e) => setCustomKeysRaw(e.target.value)}
                   />
@@ -1047,8 +1047,8 @@ Chat Sekarang"
                       </thead>
                       <tbody>
                         {(keyStatuses.length > 0 ? keyStatuses : [
-                          { keyAlias: "Sistem #1 (Utama)", keySignature: "AIzaSyA1...3Sbjw", type: "System", status: "Active", cooldown: "0s", lastRequest: "-", fails: 0 },
-                          { keyAlias: "Sistem #2 (Cadangan)", keySignature: "AIzaSyAf...LRzhg", type: "System", status: "Active", cooldown: "0s", lastRequest: "-", fails: 0 },
+                          { keyAlias: "Sistem #1 (Utama)", keySignature: "SYS_KEY_PRIMARY_MASKED", type: "System", status: "Active", cooldown: "0s", lastRequest: "-", fails: 0 },
+                          { keyAlias: "Sistem #2 (Cadangan)", keySignature: "SYS_KEY_BACKUP_MASKED", type: "System", status: "Active", cooldown: "0s", lastRequest: "-", fails: 0 },
                           ...customKeys.map((key, index) => {
                             const sig = key.length > 12 ? `${key.substring(0, 8)}...${key.substring(key.length - 6)}` : "Key Pendek";
                             return {
@@ -1171,7 +1171,7 @@ Chat Sekarang"
       <footer className="bg-white border-t border-slate-100 py-8 mt-12 text-center text-slate-400 text-xs">
         <div className="max-w-4xl mx-auto px-4 flex justify-center">
           <p className="text-slate-400">
-            © {new Date().getFullYear()} AI Product Description Rewriter. Hak Cipta Dilindungi.
+            © {new Date().getFullYear()} Karya Prajurit Digital. Hak Cipta Dilindungi.
           </p>
         </div>
       </footer>
